@@ -1,0 +1,6 @@
+.git/
+.idea/
+
+LICENSE
+*.md
+.dcignore

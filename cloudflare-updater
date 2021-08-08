@@ -1,20 +1,58 @@
 #!/bin/bash
 
-auth_email=""                                      # The email used to login 'https://dash.cloudflare.com'
-auth_method="token"                                # Set to "global" for Global API Key or "token" for Scoped API Token 
-auth_key=""                                        # Your API Token or Global API Key
-zone_identifier=""                                 # Can be found in the "Overview" tab of your domain
-record_name=""                                     # Which record you want to be synced
-proxy=false                                        # Set the proxy to true or false
+auth_email="${CLUDFLARE_AUTH_EMAIL}"                 # The email used to login 'https://dash.cloudflare.com'
+auth_method="${CLUDFLARE_AUTH_METHOD}"               # Set to "global" for Global API Key or "token" for Scoped API Token
+auth_key="${CLUDFLARE_AUTH_KEY}"                     # Your API Token or Global API Key
+zone_identifier="${CLUDFLARE_ZONE_ID}"               # Can be found in the "Overview" tab of your domain
+record_name="${CLUDFLARE_RECORD_NAMEL}"              # Which record you want to be synced
+proxy=${CLUDFLARE_RECORD_PROXY}                      # Set the proxy to true or false
 
+################################################
+## Check required environment variables are set
+################################################
 
+if [ "${auth_email}" == ""  ]; then
+  logger -s "DDNS Updater: No email has been set"
+fi
+
+if [ "${auth_method}" == ""  ]; then
+  logger -s "DDNS Updater: No auth method has been set"
+fi
+
+if [ "${auth_key}" == ""  ]; then
+  logger -s "DDNS Updater: No auth key has been set"
+fi
+
+if [ "${zone_identifier}" == ""  ]; then
+  logger -s "DDNS Updater: No zone ID has been set"
+fi
+
+if [ "${record_name}" == ""  ]; then
+  logger -s "DDNS Updater: No record name has been set"
+fi
+
+if [ "${proxy}" == "" ]; then
+  logger -s "DDNS Updater: No proxy value has been set has been set"
+elif [ "${proxy}" != "true" && "${proxy}" != "false" ]; then
+  logger -s "DDNS Updater: Proxy value is invalid, should be one of ['true', 'false']"
+
+fi
+
+################################################
+## Exit when req vars are unset
+################################################
+
+if [ -z "$auth_email" ] || [ -z "$auth_method" ] || [ -z "$auth_key"  || [ -z "$zone_identifier" || [ -z "$record_name" ]; then
+  logger -s "DDNS Updater: One or more required variables are unset, check config and try again."
+  exit 1
+fi
 
 ###########################################
 ## Check if we have a public IP
 ###########################################
 ip=$(curl -s https://api.ipify.org || curl -s https://ipv4.icanhazip.com/)
 
-if [ "${ip}" == "" ]; then 
+if [ "${ip}" == "" ]; then
   logger -s "DDNS Updater: No public IP found"
   exit 1
 fi
