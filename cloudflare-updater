@@ -1,40 +1,40 @@
 #!/bin/bash
 
 auth_email="${CLUDFLARE_AUTH_EMAIL}"                 # The email used to login 'https://dash.cloudflare.com'
-auth_method="${CLUDFLARE_AUTH_METHOD}"               # Set to "global" for Global API Key or "token" for Scoped API Token
+auth_method="global"                                 # Set to "global" for Global API Key or "token" for Scoped API Token
 auth_key="${CLUDFLARE_AUTH_KEY}"                     # Your API Token or Global API Key
 zone_identifier="${CLUDFLARE_ZONE_ID}"               # Can be found in the "Overview" tab of your domain
-record_name="${CLUDFLARE_RECORD_NAMEL}"              # Which record you want to be synced
-proxy=${CLUDFLARE_RECORD_PROXY}                      # Set the proxy to true or false
+record_name="${CLUDFLARE_RECORD_NAME}"               # Which record you want to be synced
+proxy=true                                           # Set the proxy to true or false
 
 ################################################
 ## Check required environment variables are set
 ################################################
 
 if [ "${auth_email}" == ""  ]; then
-  logger -s "DDNS Updater: No email has been set"
+  echo "$(date +%F-%R:%S) - DDNS Updater: No email has been set"
 fi
 
 if [ "${auth_method}" == ""  ]; then
-  logger -s "DDNS Updater: No auth method has been set"
+  echo "$(date +%F-%R:%S) - DDNS Updater: No auth method has been set"
 fi
 
 if [ "${auth_key}" == ""  ]; then
-  logger -s "DDNS Updater: No auth key has been set"
+  echo "$(date +%F-%R:%S) - DDNS Updater: No auth key has been set"
 fi
 
 if [ "${zone_identifier}" == ""  ]; then
-  logger -s "DDNS Updater: No zone ID has been set"
+  echo "$(date +%F-%R:%S) - DDNS Updater: No zone ID has been set"
 fi
 
 if [ "${record_name}" == ""  ]; then
-  logger -s "DDNS Updater: No record name has been set"
+  echo "$(date +%F-%R:%S) - DDNS Updater: No record name has been set"
 fi
 
 if [ "${proxy}" == "" ]; then
-  logger -s "DDNS Updater: No proxy value has been set has been set"
-elif [ "${proxy}" != "true" && "${proxy}" != "false" ]; then
-  logger -s "DDNS Updater: Proxy value is invalid, should be one of ['true', 'false']"
+  echo "$(date +%F-%R:%S) - DDNS Updater: No proxy value has been set has been set"
+elif [ "${proxy}" != "true" ] && [ "${proxy}" != "false" ]; then
+  echo "$(date +%F-%R:%S) - DDNS Updater: Proxy value is invalid, should be one of ['true', 'false']"
 
 fi
 
@@ -42,18 +42,18 @@ fi
 ## Exit when req vars are unset
 ################################################
 
-if [ -z "$auth_email" ] || [ -z "$auth_method" ] || [ -z "$auth_key"  || [ -z "$zone_identifier" || [ -z "$record_name" ]; then
-  logger -s "DDNS Updater: One or more required variables are unset, check config and try again."
+if [ -z "$auth_email" ] || [ -z "$auth_method" ] || [ -z "$auth_key" ] || [ -z "$zone_identifier" ] || [ -z "$record_name" ]; then
+  echo "$(date +%F-%R:%S) - DDNS Updater: One or more required variables are unset, check config and try again."
   exit 1
 fi
 
 ###########################################
 ## Check if we have a public IP
 ###########################################
-ip=$(curl -s https://api.ipify.org || curl -s https://ipv4.icanhazip.com/)
+ip=$(dig @1.1.1.1 ch txt whoami.cloudflare +short | sed 's/"//g')
 
 if [ "${ip}" == "" ]; then
-  logger -s "DDNS Updater: No public IP found"
+  echo "$(date +%F-%R:%S) - DDNS Updater: No public IP found"
   exit 1
 fi
 
@@ -70,49 +70,77 @@ fi
 ## Seek for the A record
 ###########################################
 
-logger "DDNS Updater: Check Initiated"
-record=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_identifier/dns_records?name=$record_name" -H "X-Auth-Email: $auth_email" -H "$auth_header $auth_key" -H "Content-Type: application/json")
+echo "$(date +%F-%R:%S) - DDNS Updater: Check Initiated"
+record=$(
+  curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_identifier/dns_records?name=$record_name" \
+  -H "X-Auth-Email: $auth_email" \
+  -H "$auth_header $auth_key" \
+  -H "Content-Type: application/json")
 
 ###########################################
 ## Check if the domain has an A record
 ###########################################
 if [[ $record == *"\"count\":0"* ]]; then
-  logger -s "DDNS Updater: Record does not exist, perhaps create one first? (${ip} for ${record_name})"
+  echo "$(date +%F-%R:%S) - DDNS Updater: Record does not exist, perhaps create one first? (${ip} for ${record_name})"
   exit 1
 fi
+
 
 ###########################################
 ## Get existing IP
 ###########################################
-old_ip=$(echo "$record" | grep -Po '(?<="content":")[^"]*' | head -1)
+old_ip=$(echo "$(date +%F-%R:%S) - $record" | grep -Po '(?<="content":")[^"]*' | head -1)
 # Compare if they're the same
-if [[ $ip == $old_ip ]]; then
-  logger "DDNS Updater: IP ($ip) for ${record_name} has not changed."
+if [[ ${ip} == ${old_ip} ]]; then
+  echo "$(date +%F-%R:%S) - DDNS Updater: IP ($ip) for ${record_name} has not changed."
   exit 0
 fi
 
 ###########################################
 ## Set the record identifier from result
 ###########################################
-record_identifier=$(echo "$record" | grep -Po '(?<="id":")[^"]*' | head -1)
+record_identifier=$(echo "$(date +%F-%R:%S) - $record" | grep -Po '(?<="id":")[^"]*' | head -1)
+echo "$(date +%F-%R:%S) - DDNS Updater: Record identifier found ${record_identifier}."
+
 
 ###########################################
 ## Change the IP@Cloudflare using the API
 ###########################################
+jq --arg key1   "name" \
+   --arg value1 "${record_name}" \
+   --arg key2   "content" \
+   --arg value2 "${ip}" \
+   '. | .[$key1]=$value1 | .[$key2]=$value2' \
+   <<<'{"proxied": true, "ttl": 1, "type":"A"}' > /tmp/data.json
+
+echo "curl -s -X PUT 'https://api.cloudflare.com/client/v4/zones/$zone_identifier/dns_records/$record_identifier' \
+      -H 'X-Auth-Email: $auth_email' \
+      -H '$auth_header $auth_key' \
+      -H 'Content-Type: application/json' \
+      -d /tmp/data.json"
+
+cat /tmp/data.json
+
 update=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zone_identifier/dns_records/$record_identifier" \
-                     -H "X-Auth-Email: $auth_email" \
-                     -H "$auth_header $auth_key" \
-                     -H "Content-Type: application/json" \
-              --data "{\"id\":\"$zone_identifier\",\"type\":\"A\",\"proxied\":${proxy},\"name\":\"$record_name\",\"content\":\"$ip\"}")
+            -H "X-Auth-Email: $auth_email" \
+            -H "$auth_header $auth_key" \
+            -H "Content-Type: application/json" \
+            --data /tmp/data.json)
+
+
 
 ###########################################
 ## Report the status
 ###########################################
+if [ "${update}" == ""  ]; then
+    echo "$(date +%F-%R:%S) - DDNS Updater: Unexpected response update is not completed"
+    exit 1
+fi
 case "$update" in
 *"\"success\":false"*)
-  logger -s "DDNS Updater: $ip $record_name DDNS failed for $record_identifier ($ip). DUMPING RESULTS:\n$update"
+  echo "$(date +%F-%R:%S) - DDNS Updater: $ip $record_name DDNS failed for $record_identifier ($ip). DUMPING RESULTS:\n$update"
   exit 1;;
 *)
-  logger "DDNS Updater: $ip $record_name DDNS updated."
+  echo "$(date +%F-%R:%S) - DDNS Updater: $ip $record_name DDNS updated."
   exit 0;;
 esac
