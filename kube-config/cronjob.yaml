@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cludflare-updater-cronjob
+  namespace: cludflare-updater-ns
+spec:
+  schedule: "*/30 * * * *"
+  failedJobsHistoryLimit: 10
+  successfulJobsHistoryLimit: 10
+  jobTemplate:
+    spec:
+      completions: 1
+      parallelism: 1
+      ttlSecondsAfterFinished: 3600
+      backoffLimit: 5
+      template:
+        metadata:
+          namespace: cludflare-updater-ns
+          name: cloudflare-updater-pod
+          labels:
+            app: cloudflare-updater
+        spec:
+          containers:
+            - name: job
+              image: dev0sc/cloudflare-updater:arm32v7-latest
+              command:
+                - node
+                - index.mjs
+              imagePullPolicy: Always
+              securityContext:
+                allowPrivilegeEscalation: false
+                privileged: false
+                runAsNonRoot: true
+                runAsGroup: 666
+                runAsUser: 666
+              envFrom:
+                - secretRef:
+                    name: cloudflare-updater-secret
+                    optional: false
+          restartPolicy: Never

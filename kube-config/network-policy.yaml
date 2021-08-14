@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cludflare-updater-network-policy
+  namespace: cludflare-updater-ns
+spec:
+  podSelector:
+    matchLabels:
+      app: cloudflare-updater
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443
+    - ports:
+        - protocol: UDP
+          port: 53
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

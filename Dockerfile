@@ -1,13 +1,16 @@
 ARG ARCH='amd64'
-FROM ${ARCH}bash:5.1
+FROM ${ARCH}/node:16-buster-slim
 
-ENV CLUDFLARE_AUTH_METHOD="token"
-ENV CLUDFLARE_RECORD_PROXY="true"
 
-RUN adduser -s /bin/bash -DH rootless -u 666 -g 666
+ENV CLOUDFLARE_AUTH_METHOD="global"
+ENV CLOUDFLARE_RECORD_PROXY="true"
+
+RUN adduser rootless --no-create-home --uid 666
 
 USER rootless
 
-COPY ./cloudflare-updater /usr/bin/cloudflare-updater
+COPY --chown=rootless ./src /usr/share/cloudflare-updater
 
-CMD ['cloudflare-updater']
+WORKDIR /usr/share/cloudflare-updater
+
+CMD ['node', 'index.mjs']
